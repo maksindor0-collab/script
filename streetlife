@@ -1,0 +1,937 @@
+--[[
+  Mod Menu Rayfield – WalkSpeed + ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat + Items (Street Life Remastered)
+--]]
+
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Ładowanie Rayfield z obsługą błędów
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not success then
+    warn("Failed to load Rayfield library: " .. tostring(Rayfield))
+    return
+end
+
+local Window = Rayfield:CreateWindow({
+    Name = "Bojuwkarz Menu",
+    LoadingTitle = "Ładowanie GUI",
+    LoadingSubtitle = "WalkSpeed + ESP + Fly + Click TP + Noclip + Hitbox Expander + Combat + Items",
+    ConfigurationSaving = {
+        Enabled = true,
+        FileName = "boj_menu"
+    }
+})
+
+-- Tworzenie zakładek
+local MainTab = Window:CreateTab("Main", 4483362458)
+local EspTab = Window:CreateTab("ESP", 4483362458)
+local PlayerTab = Window:CreateTab("Player", 4483362458)
+local HitboxTab = Window:CreateTab("Hitbox Expander", 4483362458)
+local CombatTab = Window:CreateTab("Combat", 4483362458)
+local ItemsTab = Window:CreateTab("Items", 4483362458)
+
+---------------------------------------------------
+-- Main Tab: Developer and Version Info
+---------------------------------------------------
+MainTab:CreateLabel("Developer: Swifty")
+MainTab:CreateLabel("Version: 0.5 Beta")  --- NOWE Z SCX HUB: Zwiększona wersja
+
+---------------------------------------------------
+-- Player Tab: WalkSpeed, Fly, Click TP, Noclip + Infinite Stamina (NOWE Z SCX HUB)
+---------------------------------------------------
+local speedEnabled, setSpeed = false, 16
+local flyEnabled, flySpeed = false, 100
+local clickTpEnabled, clickTpKey = false, Enum.KeyCode.Q
+local noclipEnabled = false
+local infiniteStaminaEnabled = false  --- NOWE Z SCX HUB
+local staminaMax = 100  --- NOWE Z SCX HUB
+local playerConn = nil
+local noclipConn = nil
+local clickTpConn = nil
+local clickTpConnections = nil
+local isClickTpKeyHeld = false
+
+-- Cache postaci dla optymalizacji
+local function getCharacterComponents()
+    local char = LocalPlayer.Character
+    return char, char and char:FindFirstChild("HumanoidRootPart"), char and char:FindFirstChildOfClass("Humanoid")
+end
+
+-- Jedna pętla Heartbeat dla WalkSpeed, Fly, Infinite Ammo + Infinite Stamina (NOWE Z SCX HUB)
+local infiniteAmmoEnabled = false
+local function updatePlayerMechanics()
+    playerConn = RunService.Heartbeat:Connect(function(dt)
+        local char, root, hum = getCharacterComponents()
+        if not (char and root and hum) then return end
+
+        -- WalkSpeed
+        if speedEnabled and hum.WalkSpeed ~= setSpeed then
+            hum.WalkSpeed = setSpeed
+        end
+
+        -- Fly
+        if flyEnabled then
+            hum.PlatformStand = true
+            local dir = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0, 1, 0) end
+            root.Velocity = dir.Magnitude > 0 and dir.Unit * flySpeed or Vector3.zero
+        elseif hum.PlatformStand then
+            hum.PlatformStand = false
+            root.Velocity = Vector3.zero
+        end
+
+        -- Infinite Stamina (NOWE Z SCX HUB: Szuka stamina values w Humanoid lub custom, resetuje na max)
+        if infiniteStaminaEnabled then
+            -- Sprawdź standardowy Humanoid stamina (jeśli gra ma)
+            if hum:FindFirstChild("Stamina") then
+                hum.Stamina.Value = staminaMax
+            end
+            -- Lub custom values w Character (np. IntValue "Stamina")
+            for _, val in pairs(char:GetDescendants()) do
+                if val:IsA("IntValue") or val:IsA("NumberValue") then
+                    if val.Name:lower():match("stamina") or val.Name:lower():match("energy") then
+                        val.Value = staminaMax
+                    end
+                end
+            end
+            -- Hook na ewentualne skrypty zużywające stamina (opcjonalny, z SCX)
+            for _, obj in pairs(char:GetDescendants()) do
+                if obj:IsA("LocalScript") and obj.Name:lower():match("stamina") then
+                    -- Prosty hook via getconnections jeśli executor supportuje
+                    for _, conn in pairs(getconnections(obj)) do
+                        if conn.Function and type(conn.Function) == "function" then
+                            conn:Disable()  -- Blokuj zużycie
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Infinite Ammo dla wszystkich broni
+        if infiniteAmmoEnabled then
+            -- Przeszukaj bronie w Backpack
+            for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+                if tool:IsA("Tool") then
+                    for _, value in pairs(tool:GetChildren()) do
+                        if value:IsA("IntValue") or value:IsA("NumberValue") then
+                            if value.Name:lower():match("ammo") or value.Name:lower():match("clip") or value.Name:lower():match("bullets") or value.Name:lower():match("magazine") or value.Name:lower():match("rounds") then
+                                print("Found ammo value: " .. value.Name .. " in " .. tool.Name) -- Debugowanie
+                                value.Value = 9999
+                            end
+                        end
+                    end
+                end
+            end
+            -- Przeszukaj wyposażoną broń w Character
+            if char then
+                for _, tool in pairs(char:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        for _, value in pairs(tool:GetChildren()) do
+                            if value:IsA("IntValue") or value:IsA("NumberValue") then
+                                if value.Name:lower():match("ammo") or value.Name:lower():match("clip") or value.Name:lower():match("bullets") or value.Name:lower():match("magazine") or value.Name:lower():match("rounds") then
+                                    print("Found ammo value: " .. value.Name .. " in " .. tool.Name) -- Debugowanie
+                                    value.Value = 9999
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- WalkSpeed UI
+PlayerTab:CreateSlider({
+    Name = "Ustaw prędkość chodzenia",
+    Range = {16, 200},
+    Increment = 1,
+    CurrentValue = setSpeed,
+    Callback = function(v)
+        setSpeed = v
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "WalkSpeed ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        speedEnabled = state
+        if speedEnabled and not playerConn then
+            updatePlayerMechanics()
+        elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then  --- NOWE Z SCX HUB: Dodano stamina
+            playerConn:Disconnect()
+            playerConn = nil
+            local _, _, hum = getCharacterComponents()
+            if hum then hum.WalkSpeed = 16 end
+        end
+    end
+})
+
+-- Fly UI
+PlayerTab:CreateSlider({
+    Name = "Fly speed",
+    Range = {10, 300},
+    Increment = 5,
+    CurrentValue = flySpeed,
+    Callback = function(v)
+        flySpeed = v
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Fly ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        flyEnabled = state
+        if flyEnabled and not playerConn then
+            updatePlayerMechanics()
+        elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then  --- NOWE Z SCX HUB: Dodano stamina
+            playerConn:Disconnect()
+            playerConn = nil
+            local _, _, hum = getCharacterComponents()
+            if hum then hum.PlatformStand = false end
+        end
+    end
+})
+
+--- NOWE Z SCX HUB: Infinite Stamina UI
+PlayerTab:CreateSlider({
+    Name = "Max Stamina",
+    Range = {50, 500},
+    Increment = 10,
+    CurrentValue = staminaMax,
+    Callback = function(v)
+        staminaMax = v
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Infinite Stamina ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        infiniteStaminaEnabled = state
+        if infiniteStaminaEnabled and not playerConn then
+            updatePlayerMechanics()
+        elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then
+            playerConn:Disconnect()
+            playerConn = nil
+        end
+    end
+})
+
+-- Click TP UI
+PlayerTab:CreateDropdown({
+    Name = "Click TP Key",
+    Options = {"Q", "E", "F", "T", "R", "Z"},
+    CurrentOption = "Q",
+    Callback = function(option)
+        clickTpKey = Enum.KeyCode[option]
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Click TP ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        clickTpEnabled = state
+        if clickTpEnabled then
+            local beganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                if not gameProcessed and input.KeyCode == clickTpKey then
+                    isClickTpKeyHeld = true
+                end
+            end)
+            local endedConn = UserInputService.InputEnded:Connect(function(input, gameProcessed)
+                if input.KeyCode == clickTpKey then
+                    isClickTpKeyHeld = false
+                end
+            end)
+            clickTpConn = Mouse.Button1Down:Connect(function()
+                if isClickTpKeyHeld and clickTpEnabled then
+                    local _, root = getCharacterComponents()
+                    if root then
+                        root.CFrame = CFrame.new(Mouse.Hit.Position + Vector3.new(0, 3, 0))
+                    end
+                end
+            end)
+            clickTpConnections = {beganConn, endedConn, clickTpConn}
+        else
+            isClickTpKeyHeld = false
+            if clickTpConnections then
+                for _, conn in ipairs(clickTpConnections) do
+                    conn:Disconnect()
+                end
+                clickTpConnections = nil
+            end
+            if clickTpConn then
+                clickTpConn:Disconnect()
+                clickTpConn = nil
+            end
+        end
+    end
+})
+
+-- Noclip UI
+PlayerTab:CreateToggle({
+    Name = "Noclip ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        noclipEnabled = state
+        if noclipEnabled then
+            noclipConn = RunService.Stepped:Connect(function()
+                local char = LocalPlayer.Character
+                if char then
+                    for _, part in ipairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        else
+            if noclipConn then
+                noclipConn:Disconnect()
+                noclipConn = nil
+            end
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end
+    end
+})
+
+---------------------------------------------------
+-- Hitbox Expander Tab (bez zmian)
+---------------------------------------------------
+local hitboxEnabled = false
+local headChamsEnabled = false
+local hitboxSize = 2
+local headChamsColor = Color3.fromRGB(255, 255, 0)
+local originalHeadSizes = {}
+local headChamsDrawings = {}
+local hitboxRefreshConn = nil
+
+local function updateHitbox(plr)
+    if plr == LocalPlayer then return end
+    local char = plr.Character
+    local head = char and char:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        if hitboxEnabled then
+            if not originalHeadSizes[plr] then
+                originalHeadSizes[plr] = head.Size
+            end
+            head.Size = originalHeadSizes[plr] * hitboxSize
+            head.CanCollide = false
+        else
+            if originalHeadSizes[plr] then
+                head.Size = originalHeadSizes[plr]
+                head.CanCollide = true
+            end
+        end
+    end
+end
+
+local function updateHeadChams(plr)
+    if plr == LocalPlayer then return end
+    local char = plr.Character
+    local head = char and char:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        local highlight = headChamsDrawings[plr]
+        if not highlight then
+            highlight = Instance.new("Highlight")
+            highlight.FillColor = headChamsColor
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.FillTransparency = 0.5
+            highlight.OutlineTransparency = 0
+            highlight.Parent = head
+            headChamsDrawings[plr] = highlight
+        end
+        highlight.Adornee = headChamsEnabled and head or nil
+        highlight.FillColor = headChamsColor
+        highlight.Enabled = headChamsEnabled and head ~= nil
+    end
+end
+
+-- Stale odświeżanie Hitbox Expander
+local function refreshHitboxes()
+    hitboxRefreshConn = RunService.Heartbeat:Connect(function()
+        if hitboxEnabled then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                updateHitbox(plr)
+            end
+        end
+    end)
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    updateHitbox(plr)
+    updateHeadChams(plr)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    originalHeadSizes[plr] = nil
+    if headChamsDrawings[plr] then
+        headChamsDrawings[plr]:Remove()
+        headChamsDrawings[plr] = nil
+    end
+end)
+
+for _, p in ipairs(Players:GetPlayers()) do
+    updateHitbox(p)
+    updateHeadChams(p)
+end
+
+-- Hitbox Expander UI
+HitboxTab:CreateSlider({
+    Name = "Head Hitbox Size",
+    Range = {1, 10},
+    Increment = 0.5,
+    CurrentValue = hitboxSize,
+    Callback = function(v)
+        hitboxSize = v
+        if hitboxEnabled then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                updateHitbox(plr)
+            end
+        end
+    end
+})
+
+HitboxTab:CreateToggle({
+    Name = "Hitbox Expander ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        hitboxEnabled = state
+        for _, plr in ipairs(Players:GetPlayers()) do
+            updateHitbox(plr)
+        end
+        if hitboxEnabled and not hitboxRefreshConn then
+            refreshHitboxes()
+        elseif not hitboxEnabled and hitboxRefreshConn then
+            hitboxRefreshConn:Disconnect()
+            hitboxRefreshConn = nil
+        end
+    end
+})
+
+HitboxTab:CreateToggle({
+    Name = "Head Chams ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        headChamsEnabled = state
+        for _, plr in ipairs(Players:GetPlayers()) do
+            updateHeadChams(plr)
+        end
+    end
+})
+
+HitboxTab:CreateColorPicker({
+    Name = "Head Chams Color",
+    Color = headChamsColor,
+    Callback = function(color)
+        headChamsColor = color
+        for _, highlight in pairs(headChamsDrawings) do
+            highlight.FillColor = headChamsColor
+        end
+    end
+})
+
+---------------------------------------------------
+-- Combat Tab: Aimlock + Infinite Ammo (bez zmian, ale dodano do pętli stamina)
+---------------------------------------------------
+local aimlockEnabled = false
+local aimlockKey = Enum.KeyCode.E
+local aimlockDistance = 100
+local aimlockFOV = 60
+local showFOVCircle = false
+local isAimlockActive = false
+local aimlockConn = nil
+local fovCircle = Drawing.new("Circle")
+
+fovCircle.Visible = false
+fovCircle.Radius = 0
+fovCircle.Color = Color3.fromRGB(255, 255, 255)
+fovCircle.Thickness = 2
+fovCircle.Filled = false
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+local function getClosestPlayerHead()
+    local closestPlayer = nil
+    local closestDistance = aimlockDistance
+    local camPos = Camera.CFrame.Position
+    local char, root = getCharacterComponents()
+
+    if not (char and root) then return nil end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        local pChar = plr.Character
+        local pHead = pChar and pChar:FindFirstChild("Head")
+        if pHead then
+            local distance = (pHead.Position - camPos).Magnitude
+            local vector = pHead.Position - camPos
+            local angle = math.deg(math.acos(Camera.CFrame.LookVector:Dot(vector.Unit)))
+            if distance <= closestDistance and angle <= aimlockFOV / 2 then
+                closestDistance = distance
+                closestPlayer = plr
+            end
+        end
+    end
+    return closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head")
+end
+
+-- Combat UI
+CombatTab:CreateDropdown({
+    Name = "Aimlock Key",
+    Options = {"Q", "E", "F", "T", "R", "Z"},
+    CurrentOption = "E",
+    Callback = function(option)
+        aimlockKey = Enum.KeyCode[option]
+    end
+})
+
+CombatTab:CreateSlider({
+    Name = "Aimlock Distance",
+    Range = {0, 300},
+    Increment = 5,
+    CurrentValue = aimlockDistance,
+    Callback = function(v)
+        aimlockDistance = v
+    end
+})
+
+CombatTab:CreateSlider({
+    Name = "Aimlock FOV",
+    Range = {10, 120},
+    Increment = 5,
+    CurrentValue = aimlockFOV,
+    Callback = function(v)
+        aimlockFOV = v
+        if showFOVCircle then
+            fovCircle.Radius = math.tan(math.rad(aimlockFOV / 2)) * (Camera.ViewportSize.Y / 2)
+        end
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "Show FOV Circle ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        showFOVCircle = state
+        fovCircle.Visible = showFOVCircle
+        if showFOVCircle then
+            fovCircle.Radius = math.tan(math.rad(aimlockFOV / 2)) * (Camera.ViewportSize.Y / 2)
+        end
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "Aimlock ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        aimlockEnabled = state
+        if aimlockEnabled then
+            local beganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                if not gameProcessed and input.KeyCode == aimlockKey then
+                    isAimlockActive = not isAimlockActive
+                end
+            end)
+            aimlockConn = RunService.RenderStepped:Connect(function()
+                if isAimlockActive and aimlockEnabled then
+                    local targetHead = getClosestPlayerHead()
+                    if targetHead then
+                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
+                    end
+                end
+                if showFOVCircle then
+                    fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                    fovCircle.Radius = math.tan(math.rad(aimlockFOV / 2)) * (Camera.ViewportSize.Y / 2)
+                end
+            end)
+            aimlockConnections = {beganConn, aimlockConn}
+        else
+            isAimlockActive = false
+            if aimlockConnections then
+                for _, conn in ipairs(aimlockConnections) do
+                    conn:Disconnect()
+                end
+                aimlockConnections = nil
+            end
+            if aimlockConn then
+                aimlockConn:Disconnect()
+                aimlockConn = nil
+            end
+            fovCircle.Visible = false
+        end
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "Infinite Ammo ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        infiniteAmmoEnabled = state
+        if infiniteAmmoEnabled and not playerConn then
+            updatePlayerMechanics()
+        elseif not (speedEnabled or flyEnabled or infiniteAmmoEnabled or infiniteStaminaEnabled) and playerConn then  --- NOWE Z SCX HUB: Dodano stamina
+            playerConn:Disconnect()
+            playerConn = nil
+        end
+    end
+})
+
+---------------------------------------------------
+-- Items Tab: Buy Weapons, ATM Deposit/Withdraw + GUNS Z SCX HUB (NOWE: Pełna lista broni, auto-buy, ammo buy)
+---------------------------------------------------
+local depositAmount = 1000
+local withdrawAmount = 1000
+local selectedWeapon = "Draco"
+local selectedAmmo = "9mm"  --- NOWE Z SCX HUB
+local buyQuantity = 1  --- NOWE Z SCX HUB
+
+-- Pełna lista broni z SCX Hub Guns Tab (dostosowana do Street Life)
+local weaponsList = {
+    "Draco", "GlockSwitch", "Glock17", "AK47", "M4A1", "Uzi", "MP5", "Shotgun", "Deagle", 
+    "Revolver", "Knife", "Crowbar", "Bat", "Pipe", "Chainsaw"  --- NOWE Z SCX HUB: Rozszerzona lista
+}
+
+-- Lista ammo z SCX Hub
+local ammoList = {"9mm", ".45", "5.56", "7.62", "12 Gauge", "Melee Ammo"}  --- NOWE Z SCX HUB
+
+-- Funkcja do zakupu broni (z SCX: Używa MainEvent lub fallback)
+local function buyWeapon(weaponName, qty)
+    local mainEvent = ReplicatedStorage:FindFirstChild("MainEvent") or ReplicatedStorage:FindFirstChild("GunShop") or ReplicatedStorage:FindFirstChild("BuyRemote")
+    if mainEvent and mainEvent:IsA("RemoteEvent") then
+        mainEvent:FireServer("BuyItem", weaponName, qty or 1)  --- NOWE Z SCX HUB: Dodano qty
+        print("Bought: " .. weaponName .. " x" .. (qty or 1))  -- Debug
+    else
+        warn("Buy remote not found – użyj Print Remotes button")
+    end
+end
+
+-- NOWE Z SCX HUB: Funkcja do zakupu ammo
+local function buyAmmo(ammoName, qty)
+    local mainEvent = ReplicatedStorage:FindFirstChild("MainEvent") or ReplicatedStorage:FindFirstChild("AmmoShop")
+    if mainEvent and mainEvent:IsA("RemoteEvent") then
+        mainEvent:FireServer("BuyAmmo", ammoName, qty or 999)  -- Dużo ammo z SCX
+        print("Bought Ammo: " .. ammoName .. " x" .. (qty or 999))
+    else
+        warn("Ammo remote not found")
+    end
+end
+
+-- NOWE Z SCX HUB: Auto-buy toggle (kupuje co X sekund)
+local autoBuyEnabled = false
+local autoBuyConn = nil
+local function startAutoBuy()
+    autoBuyConn = RunService.Heartbeat:Connect(function()
+        if autoBuyEnabled then
+            buyWeapon(selectedWeapon, buyQuantity)
+            wait(5)  -- Co 5s, dostosuj
+        end
+    end)
+end
+
+-- Funkcja dla ATM (bez zmian, ale z SCX fallback)
+local function handleATM(action, amount)
+    local mainEvent = ReplicatedStorage:FindFirstChild("MainEvent") or ReplicatedStorage:FindFirstChild("ATM")
+    if mainEvent and mainEvent:IsA("RemoteEvent") then
+        if action == "Deposit" then
+            mainEvent:FireServer("ATMDeposit", amount)
+        elseif action == "Withdraw" then
+            mainEvent:FireServer("ATMWithdraw", amount)
+        end
+    else
+        warn("ATM remote not found")
+    end
+end
+
+-- Items Tab UI (rozszerzone z Guns z SCX)
+ItemsTab:CreateLabel("Buy Weapons Anywhere")  --- NOWE Z SCX HUB
+
+ItemsTab:CreateDropdown({
+    Name = "Select Weapon",
+    Options = weaponsList,
+    CurrentOption = selectedWeapon,
+    Callback = function(option)
+        selectedWeapon = option
+    end
+})
+
+--- NOWE Z SCX HUB: Slider na ilość
+ItemsTab:CreateSlider({
+    Name = "Buy Quantity",
+    Range = {1, 10},
+    Increment = 1,
+    CurrentValue = buyQuantity,
+    Callback = function(v)
+        buyQuantity = v
+    end
+})
+
+ItemsTab:CreateButton({
+    Name = "Buy Selected Weapon",
+    Callback = function()
+        buyWeapon(selectedWeapon, buyQuantity)
+    end
+})
+
+--- NOWE Z SCX HUB: Sekcja Ammo
+ItemsTab:CreateLabel("Buy Ammo")
+
+ItemsTab:CreateDropdown({
+    Name = "Select Ammo",
+    Options = ammoList,
+    CurrentOption = selectedAmmo,
+    Callback = function(option)
+        selectedAmmo = option
+    end
+})
+
+ItemsTab:CreateButton({
+    Name = "Buy Selected Ammo (Max)",
+    Callback = function()
+        buyAmmo(selectedAmmo, 999)
+    end
+})
+
+--- NOWE Z SCX HUB: Auto Buy
+ItemsTab:CreateToggle({
+    Name = "Auto Buy Selected Weapon ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        autoBuyEnabled = state
+        if autoBuyEnabled then
+            startAutoBuy()
+        else
+            if autoBuyConn then
+                autoBuyConn:Disconnect()
+                autoBuyConn = nil
+            end
+        end
+    end
+})
+
+--- NOWE Z SCX HUB: Free Buy (obejście ceny, jeśli gra ma)
+ItemsTab:CreateButton({
+    Name = "Free Buy All Weapons",
+    Callback = function()
+        for _, weapon in ipairs(weaponsList) do
+            buyWeapon(weapon, 1)
+            wait(0.5)
+        end
+    end
+})
+
+-- ATM (bez zmian)
+ItemsTab:CreateSlider({
+    Name = "Deposit Amount",
+    Range = {100, 100000},
+    Increment = 100,
+    CurrentValue = depositAmount,
+    Callback = function(v)
+        depositAmount = v
+    end
+})
+
+ItemsTab:CreateButton({
+    Name = "Deposit to ATM",
+    Callback = function()
+        handleATM("Deposit", depositAmount)
+    end
+})
+
+ItemsTab:CreateSlider({
+    Name = "Withdraw Amount",
+    Range = {100, 100000},
+    Increment = 100,
+    CurrentValue = withdrawAmount,
+    Callback = function(v)
+        withdrawAmount = v
+    end
+})
+
+ItemsTab:CreateButton({
+    Name = "Withdraw from ATM",
+    Callback = function()
+        handleATM("Withdraw", withdrawAmount)
+    end
+})
+
+--- NOWE Z SCX HUB: Debug button do remotes
+ItemsTab:CreateButton({
+    Name = "Print Remotes (Debug)",
+    Callback = function()
+        for _, v in pairs(ReplicatedStorage:GetChildren()) do
+            if v:IsA("RemoteEvent") then
+                print("Remote: " .. v.Name)
+            end
+        end
+    end
+})
+
+ItemsTab:CreateLabel("Note: Adjust RemoteEvent names if needed (e.g., 'MainEvent', 'BuyItem')")
+
+---------------------------------------------------
+-- ESP section (bez zmian)
+---------------------------------------------------
+local espEnabled = false
+local chamsEnabled = false
+local espColor = Color3.fromRGB(0, 255, 0)
+local chamsColor = Color3.fromRGB(255, 0, 0)
+local espDrawings = {}
+local chamsDrawings = {}
+
+-- Cache postaci innych graczy
+local function getPlayerComponents(plr)
+    local char = plr.Character
+    return char, char and char:FindFirstChild("HumanoidRootPart"), char and char:FindFirstChildOfClass("Humanoid")
+end
+
+-- ESP i Chams
+local function createEsp(plr)
+    if plr == LocalPlayer then return end
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = espColor
+    text.Visible = false
+    espDrawings[plr] = text
+end
+
+local function removeEsp(plr)
+    if espDrawings[plr] then
+        espDrawings[plr]:Remove()
+        espDrawings[plr] = nil
+    end
+end
+
+local function createChams(plr)
+    if plr == LocalPlayer then return end
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = chamsColor
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = false
+    chamsDrawings[plr] = highlight
+end
+
+local function removeChams(plr)
+    if chamsDrawings[plr] then
+        chamsDrawings[plr]:Remove()
+        chamsDrawings[plr] = nil
+    end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    createEsp(plr)
+    createChams(plr)
+    updateHitbox(plr)
+    updateHeadChams(plr)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    removeEsp(plr)
+    removeChams(plr)
+    originalHeadSizes[plr] = nil
+    if headChamsDrawings[plr] then
+        headChamsDrawings[plr]:Remove()
+        headChamsDrawings[plr] = nil
+    end
+end)
+
+for _, p in ipairs(Players:GetPlayers()) do
+    createEsp(p)
+    createChams(p)
+    updateHitbox(p)
+    updateHeadChams(p)
+end
+
+-- Jedna pętla RenderStepped dla ESP i Chams
+RunService.RenderStepped:Connect(function()
+    if not (espEnabled or chamsEnabled) then
+        for _, d in pairs(espDrawings) do d.Visible = false end
+        for _, h in pairs(chamsDrawings) do h.Enabled = false end
+        return
+    end
+
+    for plr, text in pairs(espDrawings) do
+        local char, root, hum = getPlayerComponents(plr)
+        if espEnabled and hum and root then
+            local pos, vis = Camera:WorldToViewportPoint(root.Position)
+            text.Visible = vis
+            if vis then
+                text.Position = Vector2.new(pos.X, pos.Y - 20)
+                text.Text = string.format("%s | HP: %d", plr.Name, hum.Health)
+                text.Color = espColor
+            end
+        else
+            text.Visible = false
+        end
+    end
+
+    for plr, highlight in pairs(chamsDrawings) do
+        highlight.Adornee = plr.Character
+        highlight.FillColor = chamsColor
+        highlight.Enabled = chamsEnabled and plr.Character ~= nil
+    end
+end)
+
+-- ESP Tab UI
+EspTab:CreateToggle({
+    Name = "ESP Nick + HP",
+    CurrentValue = false,
+    Callback = function(state)
+        espEnabled = state
+    end
+})
+
+EspTab:CreateColorPicker({
+    Name = "ESP Nick + HP Color",
+    Color = espColor,
+    Callback = function(color)
+        espColor = color
+        for _, text in pairs(espDrawings) do
+            text.Color = espColor
+        end
+    end
+})
+
+EspTab:CreateToggle({
+    Name = "Chams ON/OFF",
+    CurrentValue = false,
+    Callback = function(state)
+        chamsEnabled = state
+    end
+})
+
+EspTab:CreateColorPicker({
+    Name = "Chams Color",
+    Color = chamsColor,
+    Callback = function(color)
+        chamsColor = color
+        for _, highlight in pairs(chamsDrawings) do
+            highlight.FillColor = chamsColor
+        end
+    end
+})
