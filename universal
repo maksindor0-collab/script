@@ -1,208 +1,208 @@
--- xSoftwares Universal Script - Rozbudowana Wersja
+-- xSoftwares Skrypt Roman GameHUB - BloxStrike Edition
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "xSoftwares | Universal",
+    Name = "xSoftwares | Skrypt Roman GameHUB",
     LoadingTitle = "xSoftwares",
-    LoadingSubtitle = "Rozbudowany Universal Script",
+    LoadingSubtitle = "Roman GameHUB - BloxStrike",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "xSoftwares",
-        FileName = "UniversalConfig"
+        FolderName = "xSoftwaresRoman",
+        FileName = "BloxStrikeConfig"
     },
 })
 
-local PlayerTab = Window:CreateTab("Player", 4483362458)
-local MovementTab = Window:CreateTab("Movement", 4483362458)
-local UtilityTab = Window:CreateTab("Utility", 4483362458)
+local BloxStrikeTab = Window:CreateTab("BloxStrike", 4483362458)
 
-PlayerTab:CreateSection("xSoftwares Player Options")
+BloxStrikeTab:CreateSection("Advanced BloxStrike Cheats")
 
--- === PLAYER TAB - Dużo opcji ===
-PlayerTab:CreateLabel("Player Modifications")
+-- ==================== VARIABLES ====================
+local ESPEnabled = false
+local ESPObjects = {}
+local AimlockEnabled = false
+local AimlockKey = Enum.UserInputType.MouseButton2  -- PPM
+local AimlockFOV = 120
+local AimlockSmooth = 8
+local FOVCircle
 
-local WalkSpeedSlider = PlayerTab:CreateSlider({
-    Name = "WalkSpeed",
-    Range = {16, 500},
-    Increment = 1,
-    CurrentValue = 16,
-    Flag = "WS",
-    Callback = function(Value)
-        local hum = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then hum.WalkSpeed = Value end
-    end
-})
-
-local JumpPowerSlider = PlayerTab:CreateSlider({
-    Name = "JumpPower",
-    Range = {50, 500},
-    Increment = 1,
-    CurrentValue = 50,
-    Flag = "JP",
-    Callback = function(Value)
-        local hum = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then hum.JumpPower = Value end
-    end
-})
-
-PlayerTab:CreateSlider({
-    Name = "HipHeight",
-    Range = {0, 20},
-    Increment = 0.1,
-    CurrentValue = 0,
-    Flag = "HipHeight",
-    Callback = function(Value)
-        local hum = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then hum.HipHeight = Value end
-    end
-})
-
-PlayerTab:CreateToggle({
-    Name = "Infinite Jump",
-    CurrentValue = false,
-    Flag = "InfJump",
-    Callback = function(Value)
-        _G.InfJump = Value
-        if Value then
-            game:GetService("UserInputService").JumpRequest:Connect(function()
-                if _G.InfJump and game.Players.LocalPlayer.Character then
-                    local hum = game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-                    if hum then hum:ChangeState("Jumping") end
-                end
-            end)
+-- ==================== STRONG ESP ====================
+local function CreateESP(player)
+    if player == game.Players.LocalPlayer then return end
+    
+    local function UpdateESP()
+        if not ESPEnabled or not player.Character then 
+            if ESPObjects[player] then
+                for _, obj in pairs(ESPObjects[player]) do obj:Remove() end
+                ESPObjects[player] = nil
+            end
+            return 
         end
-    end
-})
-
-PlayerTab:CreateToggle({
-    Name = "Godmode (No Damage)",
-    CurrentValue = false,
-    Flag = "Godmode",
-    Callback = function(Value)
-        local char = game.Players.LocalPlayer.Character
-        if char and char:FindFirstChild("Humanoid") then
-            char.Humanoid.MaxHealth = Value and 999999 or 100
-            char.Humanoid.Health = Value and 999999 or 100
-        end
-    end
-})
-
-PlayerTab:CreateButton({
-    Name = "Respawn Character",
-    Callback = function()
-        game.Players.LocalPlayer.Character:BreakJoints()
-    end
-})
-
-PlayerTab:CreateButton({
-    Name = "Reset to Default",
-    Callback = function()
-        local hum = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then
-            hum.WalkSpeed = 16
-            hum.JumpPower = 50
-            hum.HipHeight = 0
-        end
-    end
-})
-
--- === MOVEMENT TAB ===
-MovementTab:CreateSection("Advanced Movement")
-
-local FlySpeed = 50
-local Flying = false
-local FlyConnection
-
-MovementTab:CreateToggle({
-    Name = "Fly (F to toggle)",
-    CurrentValue = false,
-    Flag = "Fly",
-    Callback = function(Value)
-        Flying = Value
-        local player = game.Players.LocalPlayer
+        
         local character = player.Character
-        if not character then return end
         local root = character:FindFirstChild("HumanoidRootPart")
+        local head = character:FindFirstChild("Head")
         local humanoid = character:FindFirstChild("Humanoid")
         
+        if not root or not head then return end
+        
+        -- Box + Name + Distance + Health
+        if not ESPObjects[player] then
+            ESPObjects[player] = {}
+        end
+        
+        -- Box
+        local box = ESPObjects[player].Box or Drawing.new("Square")
+        box.Thickness = 2
+        box.Color = Color3.fromRGB(255, 0, 0)
+        box.Transparency = 1
+        box.Filled = false
+        ESPObjects[player].Box = box
+        
+        -- Name
+        local name = ESPObjects[player].Name or Drawing.new("Text")
+        name.Size = 16
+        name.Color = Color3.fromRGB(255, 255, 255)
+        name.Outline = true
+        name.Center = true
+        ESPObjects[player].Name = name
+        
+        -- Distance
+        local distText = ESPObjects[player].Dist or Drawing.new("Text")
+        distText.Size = 14
+        distText.Color = Color3.fromRGB(200, 200, 200)
+        distText.Outline = true
+        distText.Center = true
+        ESPObjects[player].Dist = distText
+    end
+    
+    game:GetService("RunService").RenderStepped:Connect(UpdateESP)
+end
+
+BloxStrikeTab:CreateToggle({
+    Name = "ESP Players (Box + Name + Distance)",
+    CurrentValue = false,
+    Flag = "StrongESP",
+    Callback = function(Value)
+        ESPEnabled = Value
         if Value then
-            humanoid.PlatformStand = true
-            FlyConnection = game:GetService("RunService").Heartbeat:Connect(function()
-                if not Flying then return end
-                local cam = workspace.CurrentCamera
-                local move = Vector3.new()
-                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
-                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
-                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
-                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
-                root.Velocity = move.Unit * FlySpeed * (game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftShift) and 3 or 1)
-            end)
+            for _, player in pairs(game.Players:GetPlayers()) do
+                CreateESP(player)
+            end
+            game.Players.PlayerAdded:Connect(CreateESP)
         else
-            if FlyConnection then FlyConnection:Disconnect() end
-            if humanoid then humanoid.PlatformStand = false end
+            for _, objs in pairs(ESPObjects) do
+                for _, obj in pairs(objs) do obj:Remove() end
+            end
+            ESPObjects = {}
         end
     end
 })
 
-MovementTab:CreateSlider({
-    Name = "Fly Speed",
-    Range = {20, 300},
-    Increment = 1,
-    CurrentValue = 50,
-    Flag = "FlySpeed",
+-- ==================== EXCELLENT AIMLOCK ====================
+local function CreateFOVCircle()
+    if FOVCircle then FOVCircle:Remove() end
+    FOVCircle = Drawing.new("Circle")
+    FOVCircle.Thickness = 2
+    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+    FOVCircle.Transparency = 0.7
+    FOVCircle.Filled = false
+    FOVCircle.NumSides = 64
+end
+
+BloxStrikeTab:CreateToggle({
+    Name = "Aimlock na Głowę (Bind: PPM)",
+    CurrentValue = false,
+    Flag = "Aimlock",
     Callback = function(Value)
-        FlySpeed = Value
+        AimlockEnabled = Value
+        if Value and not FOVCircle then CreateFOVCircle() end
+        if not Value and FOVCircle then FOVCircle:Remove() end
     end
 })
 
-MovementTab:CreateToggle({
-    Name = "Noclip",
-    CurrentValue = false,
-    Flag = "Noclip",
+BloxStrikeTab:CreateSlider({
+    Name = "Aimlock FOV",
+    Range = {30, 500},
+    Increment = 5,
+    CurrentValue = 120,
+    Flag = "AimFOV",
     Callback = function(Value)
-        _G.Noclip = Value
-        game:GetService("RunService").Stepped:Connect(function()
-            if _G.Noclip then
-                local char = game.Players.LocalPlayer.Character
-                if char then
-                    for _, v in pairs(char:GetDescendants()) do
-                        if v:IsA("BasePart") then v.CanCollide = false end
-                    end
+        AimlockFOV = Value
+        if FOVCircle then FOVCircle.Radius = Value end
+    end
+})
+
+BloxStrikeTab:CreateSlider({
+    Name = "Aimlock Smoothness",
+    Range = {1, 30},
+    Increment = 1,
+    CurrentValue = 8,
+    Flag = "AimSmooth",
+    Callback = function(Value)
+        AimlockSmooth = Value
+    end
+})
+
+-- Aimlock Loop
+game:GetService("RunService").RenderStepped:Connect(function()
+    if FOVCircle then
+        FOVCircle.Position = Vector2.new(game:GetService("UserInputService"):GetMouseLocation().X, game:GetService("UserInputService"):GetMouseLocation().Y)
+        FOVCircle.Visible = AimlockEnabled
+    end
+    
+    if not AimlockEnabled then return end
+    
+    local mouse = game.Players.LocalPlayer:GetMouse()
+    local camera = workspace.CurrentCamera
+    local closestDist = AimlockFOV
+    local closestPlayer = nil
+    
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local screenPos, onScreen = camera:WorldToViewportPoint(head.Position)
+            
+            if onScreen then
+                local mousePos = Vector2.new(mouse.X, mouse.Y)
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                
+                if dist < closestDist then
+                    closestDist = dist
+                    closestPlayer = player
                 end
             end
-        end)
-    end
-})
-
--- === UTILITY TAB ===
-UtilityTab:CreateSection("Utility")
-
-UtilityTab:CreateToggle({
-    Name = "Anti-AFK",
-    CurrentValue = true,
-    Flag = "AntiAFK",
-    Callback = function(Value)
-        if Value then
-            local vu = game:GetService("VirtualUser")
-            game:GetService("Players").LocalPlayer.Idled:Connect(function()
-                vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-                wait(1)
-                vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-            end)
         end
     end
-})
-
-UtilityTab:CreateButton({
-    Name = "Rejoin Server",
-    Callback = function()
-        game:GetService("TeleportService"):Teleport(game.PlaceId, game.Players.LocalPlayer)
+    
+    if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head") then
+        local targetHead = closestPlayer.Character.Head.Position
+        camera.CFrame = camera.CFrame:Lerp(
+            CFrame.new(camera.CFrame.Position, targetHead), 
+            1 / AimlockSmooth
+        )
     end
-})
+end)
+
+-- Bind (PPM)
+game:GetService("UserInputService").InputBegan:Connect(function(input)
+    if input.UserInputType == AimlockKey then
+        AimlockEnabled = true
+    end
+end)
+
+game:GetService("UserInputService").InputEnded:Connect(function(input)
+    if input.UserInputType == AimlockKey then
+        AimlockEnabled = false
+    end
+end)
+
+BloxStrikeTab:CreateSection("Info")
+BloxStrikeTab:CreateLabel("Aimlock: Trzymaj PPM (Prawy przycisk myszy)")
+BloxStrikeTab:CreateLabel("ESP jest bardzo widoczny i stabilny")
 
 Rayfield:Notify({
-    Title = "xSoftwares",
-    Content = "Rozbudowany Universal Script załadowany pomyślnie!",
-    Duration = 6,
+    Title = "xSoftwares Roman GameHUB",
+    Content = "BloxStrike Cheats załadowane - ESP + Aimlock gotowe!",
+    Duration = 7,
     Image = 4483362458
 })
