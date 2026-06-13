@@ -20,103 +20,185 @@ BloxStrikeTab:CreateSection("Advanced BloxStrike Cheats")
 local ESPEnabled = false
 local ESPObjects = {}
 local AimlockEnabled = false
-local AimlockKey = Enum.UserInputType.MouseButton2  -- PPM
 local AimlockFOV = 120
 local AimlockSmooth = 8
 local FOVCircle
 
--- ==================== STRONG ESP ====================
-local function CreateESP(player)
-    if player == game.Players.LocalPlayer then return end
+-- ==================== STRONG ESP (Naprawiony + Rozbudowany) ====================
+local function UpdateAllESP()
+    if not ESPEnabled then return end
     
-    local function UpdateESP()
-        if not ESPEnabled or not player.Character then 
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player == game.Players.LocalPlayer then continue end
+        
+        local character = player.Character
+        if not character then 
             if ESPObjects[player] then
                 for _, obj in pairs(ESPObjects[player]) do obj:Remove() end
                 ESPObjects[player] = nil
             end
-            return 
+            continue 
         end
         
-        local character = player.Character
         local root = character:FindFirstChild("HumanoidRootPart")
         local head = character:FindFirstChild("Head")
         local humanoid = character:FindFirstChild("Humanoid")
         
-        if not root or not head then return end
+        if not root or not head or not humanoid then continue end
         
-        -- Box + Name + Distance + Health
         if not ESPObjects[player] then
             ESPObjects[player] = {}
         end
         
+        local rootPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(root.Position)
+        if not onScreen then continue end
+        
+        local headPos = workspace.CurrentCamera:WorldToViewportPoint(head.Position)
+        local legPos = workspace.CurrentCamera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+        
+        local height = math.abs(headPos.Y - legPos.Y)
+        local width = height * 0.6
+        
         -- Box
         local box = ESPObjects[player].Box or Drawing.new("Square")
         box.Thickness = 2
-        box.Color = Color3.fromRGB(255, 0, 0)
+        box.Color = Color3.fromRGB(255, 50, 50)
         box.Transparency = 1
         box.Filled = false
+        box.Size = Vector2.new(width, height)
+        box.Position = Vector2.new(rootPos.X - width/2, rootPos.Y - height/2)
         ESPObjects[player].Box = box
         
         -- Name
         local name = ESPObjects[player].Name or Drawing.new("Text")
-        name.Size = 16
+        name.Text = player.Name
+        name.Size = 15
         name.Color = Color3.fromRGB(255, 255, 255)
         name.Outline = true
         name.Center = true
+        name.Position = Vector2.new(rootPos.X, rootPos.Y - height/2 - 20)
         ESPObjects[player].Name = name
         
         -- Distance
+        local distance = (game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and 
+                         (root.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude) or 0
+        
         local distText = ESPObjects[player].Dist or Drawing.new("Text")
+        distText.Text = string.format("%.0f studs", distance)
         distText.Size = 14
         distText.Color = Color3.fromRGB(200, 200, 200)
         distText.Outline = true
         distText.Center = true
+        distText.Position = Vector2.new(rootPos.X, rootPos.Y + height/2 + 5)
         ESPObjects[player].Dist = distText
+        
+        -- Health Bar
+        if humanoid.Health then
+            local healthBar = ESPObjects[player].Health or Drawing.new("Square")
+            local healthPercent = humanoid.Health / humanoid.MaxHealth
+            healthBar.Size = Vector2.new(4, height * healthPercent)
+            healthBar.Position = Vector2.new(rootPos.X - width/2 - 8, rootPos.Y - height/2 + (height * (1 - healthPercent)))
+            healthBar.Color = Color3.fromRGB(255 - (255 * healthPercent), 255 * healthPercent, 0)
+            healthBar.Thickness = 1
+            healthBar.Filled = true
+            ESPObjects[player].Health = healthBar
+        end
     end
-    
-    game:GetService("RunService").RenderStepped:Connect(UpdateESP)
 end
 
+-- ESP Toggle
 BloxStrikeTab:CreateToggle({
-    Name = "ESP Players (Box + Name + Distance)",
+    Name = "ESP Players (Box + Name + Distance + Health)",
     CurrentValue = false,
     Flag = "StrongESP",
     Callback = function(Value)
         ESPEnabled = Value
+        
         if Value then
-            for _, player in pairs(game.Players:GetPlayers()) do
-                CreateESP(player)
-            end
-            game.Players.PlayerAdded:Connect(CreateESP)
+            game:GetService("RunService").RenderStepped:Connect(UpdateAllESP)
         else
             for _, objs in pairs(ESPObjects) do
-                for _, obj in pairs(objs) do obj:Remove() end
+                for _, obj in pairs(objs) do 
+                    if obj then obj:Remove() end 
+                end
             end
             ESPObjects = {}
         end
     end
 })
 
--- ==================== EXCELLENT AIMLOCK ====================
+-- ==================== HEAD HITBOX EXPANDER ====================
+local HitboxEnabled = false
+local HitboxSize = 2.5
+local HitboxTransparency = 0.7
+
+BloxStrikeTab:CreateToggle({
+    Name = "Head Hitbox Expander",
+    CurrentValue = false,
+    Flag = "HitboxExpander",
+    Callback = function(Value)
+        HitboxEnabled = Value
+    end
+})
+
+BloxStrikeTab:CreateSlider({
+    Name = "Hitbox Size",
+    Range = {1, 6},
+    Increment = 0.1,
+    CurrentValue = 2.5,
+    Flag = "HitboxSize",
+    Callback = function(Value)
+        HitboxSize = Value
+    end
+})
+
+BloxStrikeTab:CreateSlider({
+    Name = "Hitbox Transparency",
+    Range = {0, 1},
+    Increment = 0.05,
+    CurrentValue = 0.7,
+    Flag = "HitboxTrans",
+    Callback = function(Value)
+        HitboxTransparency = Value
+    end
+})
+
+-- Hitbox Loop
+game:GetService("RunService").Heartbeat:Connect(function()
+    if not HitboxEnabled then return end
+    
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            head.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+            head.Transparency = HitboxTransparency
+            head.CanCollide = false
+        end
+    end
+end)
+
+-- ==================== AIMLOCK (z FOV) ====================
 local function CreateFOVCircle()
     if FOVCircle then FOVCircle:Remove() end
     FOVCircle = Drawing.new("Circle")
     FOVCircle.Thickness = 2
     FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircle.Transparency = 0.7
+    FOVCircle.Transparency = 0.6
     FOVCircle.Filled = false
-    FOVCircle.NumSides = 64
+    FOVCircle.NumSides = 80
 end
 
 BloxStrikeTab:CreateToggle({
-    Name = "Aimlock na Głowę (Bind: PPM)",
+    Name = "Aimlock na Głowę (Trzymaj PPM)",
     CurrentValue = false,
     Flag = "Aimlock",
     Callback = function(Value)
         AimlockEnabled = Value
         if Value and not FOVCircle then CreateFOVCircle() end
-        if not Value and FOVCircle then FOVCircle:Remove() end
+        if not Value and FOVCircle then 
+            FOVCircle:Remove() 
+            FOVCircle = nil 
+        end
     end
 })
 
@@ -128,13 +210,12 @@ BloxStrikeTab:CreateSlider({
     Flag = "AimFOV",
     Callback = function(Value)
         AimlockFOV = Value
-        if FOVCircle then FOVCircle.Radius = Value end
     end
 })
 
 BloxStrikeTab:CreateSlider({
     Name = "Aimlock Smoothness",
-    Range = {1, 30},
+    Range = {1, 25},
     Increment = 1,
     CurrentValue = 8,
     Flag = "AimSmooth",
@@ -143,66 +224,57 @@ BloxStrikeTab:CreateSlider({
     end
 })
 
--- Aimlock Loop
+-- Aimlock + FOV Loop
 game:GetService("RunService").RenderStepped:Connect(function()
     if FOVCircle then
-        FOVCircle.Position = Vector2.new(game:GetService("UserInputService"):GetMouseLocation().X, game:GetService("UserInputService"):GetMouseLocation().Y)
+        local mouseLoc = game:GetService("UserInputService"):GetMouseLocation()
+        FOVCircle.Position = mouseLoc
+        FOVCircle.Radius = AimlockFOV
         FOVCircle.Visible = AimlockEnabled
     end
     
     if not AimlockEnabled then return end
     
-    local mouse = game.Players.LocalPlayer:GetMouse()
     local camera = workspace.CurrentCamera
+    local mouse = game.Players.LocalPlayer:GetMouse()
     local closestDist = AimlockFOV
     local closestPlayer = nil
     
     for _, player in pairs(game.Players:GetPlayers()) do
         if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local head = player.Character.Head
-            local screenPos, onScreen = camera:WorldToViewportPoint(head.Position)
+            local headPos = camera:WorldToViewportPoint(player.Character.Head.Position)
+            local mousePos = Vector2.new(mouse.X, mouse.Y)
+            local dist = (Vector2.new(headPos.X, headPos.Y) - mousePos).Magnitude
             
-            if onScreen then
-                local mousePos = Vector2.new(mouse.X, mouse.Y)
-                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                
-                if dist < closestDist then
-                    closestDist = dist
-                    closestPlayer = player
-                end
+            if dist < closestDist then
+                closestDist = dist
+                closestPlayer = player
             end
         end
     end
     
     if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head") then
-        local targetHead = closestPlayer.Character.Head.Position
-        camera.CFrame = camera.CFrame:Lerp(
-            CFrame.new(camera.CFrame.Position, targetHead), 
-            1 / AimlockSmooth
-        )
+        local targetPos = closestPlayer.Character.Head.Position
+        camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, targetPos), 1 / AimlockSmooth)
     end
 end)
 
--- Bind (PPM)
+-- Bind PPM
 game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.UserInputType == AimlockKey then
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimlockEnabled = true
     end
 end)
 
 game:GetService("UserInputService").InputEnded:Connect(function(input)
-    if input.UserInputType == AimlockKey then
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
         AimlockEnabled = false
     end
 end)
 
-BloxStrikeTab:CreateSection("Info")
-BloxStrikeTab:CreateLabel("Aimlock: Trzymaj PPM (Prawy przycisk myszy)")
-BloxStrikeTab:CreateLabel("ESP jest bardzo widoczny i stabilny")
-
 Rayfield:Notify({
     Title = "xSoftwares Roman GameHUB",
-    Content = "BloxStrike Cheats załadowane - ESP + Aimlock gotowe!",
-    Duration = 7,
+    Content = "BloxStrike Cheats załadowane pomyślnie!\nESP + Hitbox + Aimlock poprawione",
+    Duration = 8,
     Image = 4483362458
 })
