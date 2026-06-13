@@ -14,9 +14,7 @@ local Window = Rayfield:CreateWindow({
 
 local BloxStrikeTab = Window:CreateTab("BloxStrike", 4483362458)
 
-BloxStrikeTab:CreateSection("Advanced BloxStrike Cheats")
-
--- ==================== ESP CONFIG ====================
+-- ==================== CONFIG ====================
 local ESP = {
     Enabled = false,
     ShowBox = true,
@@ -32,215 +30,160 @@ local HitboxEnabled = false
 local HitboxSize = 2.5
 local HitboxTransparency = 0.7
 
+local AimlockEnabled = false
+local AimlockFOV = 120
+local AimlockSmooth = 8
+local FOVCircle = nil
+
 -- ==================== ESP FUNCTIONS ====================
 local function DestroyESP(player)
     if ESP.Objects[player] then
-        for _, obj in pairs(ESP.Objects[player]) do
-            if obj and obj.Remove then obj:Remove() end
+        for _, v in pairs(ESP.Objects[player]) do
+            pcall(function() v:Remove() end)
         end
         ESP.Objects[player] = nil
     end
 end
 
-local function UpdateESP()
-    if not ESP.Enabled then return end
+local ESPConnection
 
-    for _, player in pairs(game.Players:GetPlayers()) do
-        if player == game.Players.LocalPlayer then continue end
+local function StartESP()
+    if ESPConnection then ESPConnection:Disconnect() end
+    ESPConnection = game:GetService("RunService").RenderStepped:Connect(function()
+        if not ESP.Enabled then return end
 
-        local character = player.Character
-        if not character then 
-            DestroyESP(player)
-            continue 
+        for _, player in pairs(game.Players:GetPlayers()) do
+            if player == game.Players.LocalPlayer then continue end
+
+            local char = player.Character
+            if not char then DestroyESP(player); continue end
+
+            local root = char:FindFirstChild("HumanoidRootPart")
+            local head = char:FindFirstChild("Head")
+            local hum = char:FindFirstChild("Humanoid")
+            if not root or not head or not hum then DestroyESP(player); continue end
+
+            local rootPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(root.Position)
+            if not onScreen then DestroyESP(player); continue end
+
+            local headPos = workspace.CurrentCamera:WorldToViewportPoint(head.Position)
+            local legPos = workspace.CurrentCamera:WorldToViewportPoint(root.Position - Vector3.new(0, 3.5, 0))
+            local height = math.abs(headPos.Y - legPos.Y)
+            local width = height * 0.65
+
+            if not ESP.Objects[player] then ESP.Objects[player] = {} end
+
+            -- Box
+            if ESP.ShowBox then
+                local box = ESP.Objects[player].Box or Drawing.new("Square")
+                box.Thickness = 2
+                box.Color = ESP.BoxColor
+                box.Transparency = 1
+                box.Filled = false
+                box.Size = Vector2.new(width, height)
+                box.Position = Vector2.new(rootPos.X - width/2, rootPos.Y - height/2)
+                ESP.Objects[player].Box = box
+            end
+
+            -- Name
+            if ESP.ShowName then
+                local name = ESP.Objects[player].Name or Drawing.new("Text")
+                name.Text = player.Name
+                name.Size = 15
+                name.Color = ESP.TextColor
+                name.Outline = true
+                name.Center = true
+                name.Position = Vector2.new(rootPos.X, rootPos.Y - height/2 - 22)
+                ESP.Objects[player].Name = name
+            end
+
+            -- Distance
+            if ESP.ShowDistance then
+                local dist = (root.Position - (game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or root).Position).Magnitude
+                local dtext = ESP.Objects[player].Dist or Drawing.new("Text")
+                dtext.Text = string.format("%.0f stud", dist)
+                dtext.Size = 14
+                dtext.Color = Color3.fromRGB(200,200,200)
+                dtext.Outline = true
+                dtext.Center = true
+                dtext.Position = Vector2.new(rootPos.X, rootPos.Y + height/2 + 8)
+                ESP.Objects[player].Dist = dtext
+            end
+
+            -- Health
+            if ESP.ShowHealth then
+                local hp = ESP.Objects[player].Health or Drawing.new("Square")
+                local percent = hum.Health / hum.MaxHealth
+                hp.Size = Vector2.new(4, height * percent)
+                hp.Position = Vector2.new(rootPos.X - width/2 - 8, rootPos.Y - height/2 + height*(1-percent))
+                hp.Color = Color3.fromRGB(255*(1-percent), 255*percent, 0)
+                hp.Filled = true
+                ESP.Objects[player].Health = hp
+            end
         end
-
-        local root = character:FindFirstChild("HumanoidRootPart")
-        local head = character:FindFirstChild("Head")
-        local humanoid = character:FindFirstChild("Humanoid")
-
-        if not root or not head or not humanoid then 
-            DestroyESP(player)
-            continue 
-        end
-
-        local rootPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(root.Position)
-        if not onScreen then 
-            DestroyESP(player)
-            continue 
-        end
-
-        local headPos = workspace.CurrentCamera:WorldToViewportPoint(head.Position)
-        local legPos = workspace.CurrentCamera:WorldToViewportPoint(root.Position - Vector3.new(0, 3.5, 0))
-
-        local height = math.abs(headPos.Y - legPos.Y)
-        local width = height * 0.65
-
-        if not ESP.Objects[player] then ESP.Objects[player] = {} end
-
-        -- Box
-        if ESP.ShowBox then
-            local box = ESP.Objects[player].Box or Drawing.new("Square")
-            box.Thickness = 2
-            box.Color = ESP.BoxColor
-            box.Transparency = 1
-            box.Filled = false
-            box.Size = Vector2.new(width, height)
-            box.Position = Vector2.new(rootPos.X - width/2, rootPos.Y - height/2)
-            ESP.Objects[player].Box = box
-        end
-
-        -- Name
-        if ESP.ShowName then
-            local name = ESP.Objects[player].Name or Drawing.new("Text")
-            name.Text = player.Name
-            name.Size = 15
-            name.Color = ESP.TextColor
-            name.Outline = true
-            name.Center = true
-            name.Position = Vector2.new(rootPos.X, rootPos.Y - height/2 - 22)
-            ESP.Objects[player].Name = name
-        end
-
-        -- Distance
-        if ESP.ShowDistance then
-            local distance = root and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and
-                (root.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude or 0
-
-            local dist = ESP.Objects[player].Dist or Drawing.new("Text")
-            dist.Text = string.format("%.0f stud", distance)
-            dist.Size = 14
-            dist.Color = Color3.fromRGB(200, 200, 200)
-            dist.Outline = true
-            dist.Center = true
-            dist.Position = Vector2.new(rootPos.X, rootPos.Y + height/2 + 6)
-            ESP.Objects[player].Dist = dist
-        end
-
-        -- Health
-        if ESP.ShowHealth and humanoid then
-            local healthPercent = humanoid.Health / humanoid.MaxHealth
-            local healthBar = ESP.Objects[player].Health or Drawing.new("Square")
-            healthBar.Size = Vector2.new(5, height * healthPercent)
-            healthBar.Position = Vector2.new(rootPos.X - width/2 - 10, rootPos.Y - height/2 + height * (1 - healthPercent))
-            healthBar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
-            healthBar.Filled = true
-            ESP.Objects[player].Health = healthBar
-        end
-    end
+    end)
 end
 
--- Główna pętla ESP (poza callbackiem - naprawia error)
-game:GetService("RunService").RenderStepped:Connect(UpdateESP)
-
--- ==================== UI OPTIONS ====================
-
--- ESP Main Toggle
+-- ==================== UI ====================
 BloxStrikeTab:CreateToggle({
     Name = "ESP Players - Włącz",
     CurrentValue = false,
     Callback = function(Value)
         ESP.Enabled = Value
-        if not Value then
-            for _, player in pairs(game.Players:GetPlayers()) do
-                DestroyESP(player)
+        if Value then
+            StartESP()
+        else
+            if ESPConnection then ESPConnection:Disconnect() end
+            for _, plr in pairs(game.Players:GetPlayers()) do
+                DestroyESP(plr)
             end
         end
     end
 })
 
-BloxStrikeTab:CreateSection("ESP Konfiguracja")
+BloxStrikeTab:CreateSection("ESP Ustawienia")
 
-BloxStrikeTab:CreateToggle({
-    Name = "Pokazuj Box",
-    CurrentValue = true,
-    Callback = function(Value) ESP.ShowBox = Value end
-})
+BloxStrikeTab:CreateToggle({Name = "Box", CurrentValue = true, Callback = function(v) ESP.ShowBox = v end})
+BloxStrikeTab:CreateToggle({Name = "Nazwa", CurrentValue = true, Callback = function(v) ESP.ShowName = v end})
+BloxStrikeTab:CreateToggle({Name = "Dystans", CurrentValue = true, Callback = function(v) ESP.ShowDistance = v end})
+BloxStrikeTab:CreateToggle({Name = "Healthbar", CurrentValue = true, Callback = function(v) ESP.ShowHealth = v end})
 
-BloxStrikeTab:CreateToggle({
-    Name = "Pokazuj Nazwę",
-    CurrentValue = true,
-    Callback = function(Value) ESP.ShowName = Value end
-})
+BloxStrikeTab:CreateColorPicker({Name = "Kolor Box", Color = ESP.BoxColor, Callback = function(c) ESP.BoxColor = c end})
+BloxStrikeTab:CreateColorPicker({Name = "Kolor Tekstu", Color = ESP.TextColor, Callback = function(c) ESP.TextColor = c end})
 
-BloxStrikeTab:CreateToggle({
-    Name = "Pokazuj Dystans",
-    CurrentValue = true,
-    Callback = function(Value) ESP.ShowDistance = Value end
-})
-
-BloxStrikeTab:CreateToggle({
-    Name = "Pokazuj Healthbar",
-    CurrentValue = true,
-    Callback = function(Value) ESP.ShowHealth = Value end
-})
-
-BloxStrikeTab:CreateColorPicker({
-    Name = "Kolor Boxa",
-    Color = ESP.BoxColor,
-    Callback = function(Value) ESP.BoxColor = Value end
-})
-
-BloxStrikeTab:CreateColorPicker({
-    Name = "Kolor Tekstu",
-    Color = ESP.TextColor,
-    Callback = function(Value) ESP.TextColor = Value end
-})
-
--- ==================== HEAD HITBOX EXPANDER ====================
+-- ==================== HITBOX EXPANDER ====================
 BloxStrikeTab:CreateSection("Head Hitbox Expander")
 
 BloxStrikeTab:CreateToggle({
-    Name = "Włącz Head Hitbox Expander",
+    Name = "Włącz Hitbox Expander",
     CurrentValue = false,
     Callback = function(Value)
         HitboxEnabled = Value
     end
 })
 
-BloxStrikeTab:CreateSlider({
-    Name = "Rozmiar Hitboxa",
-    Range = {1, 8},
-    Increment = 0.1,
-    CurrentValue = 2.5,
-    Callback = function(Value)
-        HitboxSize = Value
-    end
-})
+BloxStrikeTab:CreateSlider({Name = "Rozmiar Hitboxu", Range = {1, 10}, Increment = 0.1, CurrentValue = 2.5, Callback = function(v) HitboxSize = v end})
+BloxStrikeTab:CreateSlider({Name = "Przezroczystość", Range = {0, 1}, Increment = 0.05, CurrentValue = 0.7, Callback = function(v) HitboxTransparency = v end})
 
-BloxStrikeTab:CreateSlider({
-    Name = "Przezroczystość",
-    Range = {0, 1},
-    Increment = 0.05,
-    CurrentValue = 0.7,
-    Callback = function(Value)
-        HitboxTransparency = Value
-    end
-})
-
--- Hitbox Loop
 game:GetService("RunService").Heartbeat:Connect(function()
     if not HitboxEnabled then return end
-    for _, player in pairs(game.Players:GetPlayers()) do
-        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local head = player.Character.Head
-            head.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
-            head.Transparency = HitboxTransparency
-            head.CanCollide = false
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if p ~= game.Players.LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            local h = p.Character.Head
+            h.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+            h.Transparency = HitboxTransparency
+            h.CanCollide = false
         end
     end
 end)
 
--- ==================== AIMLOCK (bez zmian) ====================
-local AimlockEnabled = false
-local AimlockFOV = 120
-local AimlockSmooth = 8
-local FOVCircle
-
-local function CreateFOVCircle()
+-- ==================== AIMLOCK ====================
+-- (pozostawiam bez zmian - działał wcześniej)
+local function CreateFOV()
     if FOVCircle then FOVCircle:Remove() end
     FOVCircle = Drawing.new("Circle")
     FOVCircle.Thickness = 2
-    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+    FOVCircle.Color = Color3.fromRGB(255,255,255)
     FOVCircle.Transparency = 0.6
     FOVCircle.Filled = false
     FOVCircle.NumSides = 80
@@ -251,75 +194,54 @@ BloxStrikeTab:CreateSection("Aimlock")
 BloxStrikeTab:CreateToggle({
     Name = "Aimlock na Głowę (Trzymaj PPM)",
     CurrentValue = false,
-    Callback = function(Value)
-        AimlockEnabled = Value
-        if Value and not FOVCircle then CreateFOVCircle() end
-        if not Value and FOVCircle then FOVCircle:Remove(); FOVCircle = nil end
+    Callback = function(v)
+        AimlockEnabled = v
+        if v and not FOVCircle then CreateFOV() end
+        if not v and FOVCircle then FOVCircle:Remove(); FOVCircle = nil end
     end
 })
 
-BloxStrikeTab:CreateSlider({
-    Name = "Aimlock FOV",
-    Range = {30, 500},
-    Increment = 5,
-    CurrentValue = 120,
-    Callback = function(Value) AimlockFOV = Value end
-})
+BloxStrikeTab:CreateSlider({Name = "FOV", Range = {30, 500}, Increment = 5, CurrentValue = 120, Callback = function(v) AimlockFOV = v end})
+BloxStrikeTab:CreateSlider({Name = "Smoothness", Range = {1, 25}, Increment = 1, CurrentValue = 8, Callback = function(v) AimlockSmooth = v end})
 
-BloxStrikeTab:CreateSlider({
-    Name = "Smoothness",
-    Range = {1, 25},
-    Increment = 1,
-    CurrentValue = 8,
-    Callback = function(Value) AimlockSmooth = Value end
-})
-
--- Aimlock + FOV Loop
 game:GetService("RunService").RenderStepped:Connect(function()
     if FOVCircle then
-        local mouseLoc = game:GetService("UserInputService"):GetMouseLocation()
-        FOVCircle.Position = mouseLoc
+        local m = game:GetService("UserInputService"):GetMouseLocation()
+        FOVCircle.Position = m
         FOVCircle.Radius = AimlockFOV
         FOVCircle.Visible = AimlockEnabled
     end
 
     if not AimlockEnabled then return end
 
-    local camera = workspace.CurrentCamera
+    local cam = workspace.CurrentCamera
     local mouse = game.Players.LocalPlayer:GetMouse()
-    local closestDist = AimlockFOV
-    local closestPlayer = nil
+    local closest, minDist = nil, AimlockFOV
 
-    for _, player in pairs(game.Players:GetPlayers()) do
-        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local headPos = camera:WorldToViewportPoint(player.Character.Head.Position)
-            local mousePos = Vector2.new(mouse.X, mouse.Y)
-            local dist = (Vector2.new(headPos.X, headPos.Y) - mousePos).Magnitude
-
-            if dist < closestDist then
-                closestDist = dist
-                closestPlayer = player
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if p ~= game.Players.LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            local pos, vis = cam:WorldToViewportPoint(p.Character.Head.Position)
+            if vis then
+                local d = (Vector2.new(pos.X, pos.Y) - Vector2.new(mouse.X, mouse.Y)).Magnitude
+                if d < minDist then
+                    minDist = d
+                    closest = p
+                end
             end
         end
     end
 
-    if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head") then
-        local targetPos = closestPlayer.Character.Head.Position
-        camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, targetPos), 1 / AimlockSmooth)
+    if closest and closest.Character and closest.Character.Head then
+        local target = closest.Character.Head.Position
+        cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target), 1/AimlockSmooth)
     end
 end)
 
--- Bind PPM
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then AimlockEnabled = true end
+game:GetService("UserInputService").InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton2 then AimlockEnabled = true end
 end)
-game:GetService("UserInputService").InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then AimlockEnabled = false end
+game:GetService("UserInputService").InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton2 then AimlockEnabled = false end
 end)
 
-Rayfield:Notify({
-    Title = "xSoftwares Roman GameHUB",
-    Content = "ESP + Hitbox + Aimlock załadowane pomyślnie!",
-    Duration = 8,
-    Image = 4483362458
-})
+Rayfield:Notify({Title = "xSoftwares", Content = "Skrypt załadowany - testuj ESP i Hitbox!", Duration = 8})
